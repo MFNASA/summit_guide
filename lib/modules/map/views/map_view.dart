@@ -776,17 +776,18 @@ class _MapDetailViewState extends State<MapDetailView> {
 
   // ====== KOMPAS (arah hadap HP) ======
   // heading dalam derajat, 0 = Utara, searah jarum jam (persis kompas asli)
-  double _heading = 360;
+  double _heading = 0;
   StreamSubscription<CompassEvent>? _compassSubscription;
 
   // ====== ROTASI PETA (gesture 2 jari) ======
   // dipakai untuk menampilkan/menyembunyikan tombol kompas
-  double _mapRotation = 360;
+  double _mapRotation = 0;
 
   // Tinggi area yang "dicadangkan" di bawah untuk panel tombol, supaya
   // peta (dan marker posisi user) tidak pernah tertutup/numpuk dengan
   // panel "MULAI PENDAKIAN" di bawah.
-  static const double _bottomPanelReservedHeight = 0;
+  // (Tidak lagi mencadangkan ruang khusus di bawah peta — sudah dihapus,
+  // solusinya sekarang tombol dipindah ke atas layar.)
 
   @override
   void initState() {
@@ -947,171 +948,167 @@ class _MapDetailViewState extends State<MapDetailView> {
     return Scaffold(
       body: Stack(
         children: [
-          // ====== PETA — area-nya SENGAJA tidak full screen, dikurangi
-          // _bottomPanelReservedHeight di bawah, supaya titik posisi user
-          // (saat auto-centered/follow mode) tidak pernah tertutup panel
-          // tombol "MULAI PENDAKIAN" di bawah. ======
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: _bottomPanelReservedHeight,
-            child: Obx(() {
-              if (controller.isLoading.value) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final points = controller.routePoints;
-              final basecampMarkers = _buildBasecampMarkers();
-              final userPosition = controller.currentPosition.value;
-
-              return FlutterMap(
-                mapController: _flutterMapController,
-                options: MapOptions(
-                  initialCenter: points.isNotEmpty
-                      ? points.first
-                      : const LatLng(-7.186, 109.929),
-                  initialZoom: 13.0,
-                  // interactionOptions.flags.all SUDAH TERMASUK rotate —
-                  // ini yang mengaktifkan gesture putar peta pakai 2 jari,
-                  // sebelumnya tidak ada sama sekali di kode lama.
-                  interactionOptions: const InteractionOptions(
-                    flags: InteractiveFlag.all,
-                  ),
-                  onPositionChanged: (position, hasGesture) {
-                    if (hasGesture && _followMode) {
-                      setState(() => _followMode = false);
-                    }
-                  },
-                  // Dipanggil tiap kali peta di-pan/zoom/ROTATE. Dipakai
-                  // buat tahu kapan tombol kompas harus muncul.
-                  onMapEvent: (MapEvent event) {
-                    final newRotation = event.camera.rotation;
-                    if ((newRotation - _mapRotation).abs() > 0.5) {
-                      setState(() => _mapRotation = newRotation);
-                    }
-                  },
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate: AppMapController.tileUrlTemplate,
-                    userAgentPackageName: 'com.summitguide.app',
-                    tileProvider: _tileProvider,
-                  ),
-                  if (points.isNotEmpty)
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: points,
-                          strokeWidth: 4.0,
-                          color: Colors.blueAccent,
-                        ),
-                      ],
-                    ),
-                  if (points.isNotEmpty)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: points.first,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.trip_origin,
-                            color: Colors.green,
-                          ),
-                        ),
-                        Marker(
-                          point: points.last,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.flag,
-                            color: Colors.red,
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (basecampMarkers.isNotEmpty)
-                    MarkerLayer(markers: basecampMarkers),
-                  // MARKER POSISI GPS — sekarang bentuk panah/segitiga,
-                  // berputar mengikuti arah hadap HP (kompas)
-                  if (userPosition != null)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: userPosition,
-                          width: 50,
-                          height: 50,
-                          child: _buildUserLocationArrow(),
-                        ),
-                      ],
-                    ),
-                ],
-              );
-            }),
-          ),
-
-          // ====== TOMBOL KOMPAS — persis Google Maps: cuma muncul kalau
-          // peta sedang diputar (bukan menghadap Utara), tap = reset.
-          // Sekarang diposisikan DI BAWAH tombol recenter. ======
-          if (_mapRotation.abs() > 0.5)
-            Positioned(
-              right: 20,
-              bottom: _bottomPanelReservedHeight + 20,
-              child: GestureDetector(
-                onTap: _resetMapRotation,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  // Jarum kompas ikut berlawanan arah rotasi peta, supaya
-                  // selalu menunjuk Utara asli — persis perilaku Google Maps.
-                  child: Transform.rotate(
-                    angle: -_mapRotation * (math.pi / 180),
-                    child: const Icon(Icons.explore, color: Colors.redAccent),
-                  ),
-                ),
-              ),
-            ),
-
-          // TOMBOL RECENTER — sekarang diposisikan DI ATAS tombol kompas,
-          // posisinya tetap selalu di atas panel bawah berkat
-          // _bottomPanelReservedHeight.
+          // ====== PETA — full screen, tidak ada lagi area "dicadangkan"
+          // di bawah (itu yang bikin ada strip blank kemarin). ======
           Obx(() {
-            final showRecenter = controller.isTracking.value && !_followMode;
-            if (!showRecenter) return const SizedBox.shrink();
-            return Positioned(
-              right: 20,
-              bottom: _bottomPanelReservedHeight + 90,
-              child: GestureDetector(
-                onTap: _recenterToUser,
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: Colors.greenAccent,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 8,
+            if (controller.isLoading.value) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final points = controller.routePoints;
+            final basecampMarkers = _buildBasecampMarkers();
+            final userPosition = controller.currentPosition.value;
+
+            return FlutterMap(
+              mapController: _flutterMapController,
+              options: MapOptions(
+                initialCenter: points.isNotEmpty
+                    ? points.first
+                    : const LatLng(-7.186, 109.929),
+                initialZoom: 13.0,
+                // interactionOptions.flags.all SUDAH TERMASUK rotate —
+                // ini yang mengaktifkan gesture putar peta pakai 2 jari,
+                // sebelumnya tidak ada sama sekali di kode lama.
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all,
+                ),
+                onPositionChanged: (position, hasGesture) {
+                  if (hasGesture && _followMode) {
+                    setState(() => _followMode = false);
+                  }
+                },
+                // Dipanggil tiap kali peta di-pan/zoom/ROTATE. Dipakai
+                // buat tahu kapan tombol kompas harus muncul.
+                onMapEvent: (MapEvent event) {
+                  final newRotation = event.camera.rotation;
+                  if ((newRotation - _mapRotation).abs() > 0.5) {
+                    setState(() => _mapRotation = newRotation);
+                  }
+                },
+              ),
+              children: [
+                TileLayer(
+                  urlTemplate: AppMapController.tileUrlTemplate,
+                  userAgentPackageName: 'com.summitguide.app',
+                  tileProvider: _tileProvider,
+                ),
+                if (points.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: points,
+                        strokeWidth: 4.0,
+                        color: Colors.blueAccent,
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.my_location, color: Colors.black),
-                ),
-              ),
+                if (points.isNotEmpty)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: points.first,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.trip_origin,
+                          color: Colors.green,
+                        ),
+                      ),
+                      Marker(
+                        point: points.last,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(
+                          Icons.flag,
+                          color: Colors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                if (basecampMarkers.isNotEmpty)
+                  MarkerLayer(markers: basecampMarkers),
+                // MARKER POSISI GPS — bentuk panah/segitiga,
+                // berputar mengikuti arah hadap HP (kompas)
+                if (userPosition != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: userPosition,
+                        width: 50,
+                        height: 50,
+                        child: _buildUserLocationArrow(),
+                      ),
+                    ],
+                  ),
+              ],
             );
           }),
+
+          // ====== GRUP TOMBOL KOMPAS + RECENTER — DIPINDAH KE ATAS,
+          // di bawah header (bukan lagi mepet panel tracking di bawah). ======
+          Positioned(
+            right: 20,
+            top: 130,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tombol kompas — selalu tampil, gaya gelap transparan
+                // konsisten dengan tombol lain di app.
+                GestureDetector(
+                  onTap: _resetMapRotation,
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                    // Jarum kompas berputar berlawanan arah rotasi peta,
+                    // supaya selalu menunjuk Utara asli (persis Google Maps).
+                    child: Transform.rotate(
+                      angle: -_mapRotation * (math.pi / 180),
+                      child: const Icon(Icons.explore, color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Tombol recenter — hanya muncul saat tracking aktif TAPI
+                // follow mode sedang mati (user habis geser peta manual).
+                Obx(() {
+                  final showRecenter =
+                      controller.isTracking.value && !_followMode;
+                  if (!showRecenter) return const SizedBox.shrink();
+                  return GestureDetector(
+                    onTap: _recenterToUser,
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child:
+                          const Icon(Icons.my_location, color: Colors.black),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
 
           SafeArea(
             child: Padding(

@@ -31,10 +31,14 @@ dependencies:
   intl: ^0.19.0
   ultralytics_yolo: ^0.6.9
   flutter_compass: ^0.8.1 
+
   nearby_connections: ^4.0.0   
   torch_light: ^1.1.0          
   audioplayers: ^6.0.0         
   permission_handler: ^11.3.1  
+
+  geocoding: ^5.0.0
+
   
 dev_dependencies:
   flutter_test:
