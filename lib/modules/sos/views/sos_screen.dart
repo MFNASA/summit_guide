@@ -75,31 +75,71 @@ class _SosScreenState extends State<SosScreen>
     );
   }
 
-  Widget _buildErrorBanner() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.orange.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.orange.withOpacity(0.4)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.orange, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                c.errorMessage.value,
-                style: const TextStyle(color: Colors.orange, fontSize: 12),
-              ),
-            ),
-          ],
-        ),
+ // GANTI method _buildErrorBanner() yang lama di sos_screen.dart dengan ini.
+// Import yang perlu ditambahkan di atas sos_screen.dart:
+// import '../services/rescue_connectivity_service.dart'; // untuk PermissionResultStatus
+
+Widget _buildErrorBanner() {
+  final status = c.errorStatus.value;
+  final isPermanentlyDenied =
+      status == PermissionResultStatus.permanentlyDenied;
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+    child: Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.withOpacity(0.4)),
       ),
-    );
-  }
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.orange, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  c.errorMessage.value,
+                  style: const TextStyle(color: Colors.orange, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              // DITAMBAHKAN: tombol retry untuk kasus denied biasa /
+              // GPS mati — supaya user bisa coba lagi tanpa keluar app.
+              TextButton(
+                onPressed: () => c.retryPermissions(),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: const Text("Coba Lagi", style: TextStyle(fontSize: 12)),
+              ),
+              // DITAMBAHKAN: hanya muncul kalau statusnya permanently denied,
+              // langsung arahkan ke halaman Settings aplikasi.
+              if (isPermanentlyDenied)
+                TextButton(
+                  onPressed: () => c.openSettings(),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.orangeAccent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text("Buka Pengaturan",
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   Widget _buildRadar(List<NearbyUser> users) {
     return SizedBox(

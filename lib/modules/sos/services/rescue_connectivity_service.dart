@@ -3,22 +3,6 @@
 // Deteksi pendaki sekitar + kirim pesan darurat SECARA OFFLINE.
 // Menggunakan package `nearby_connections` yang berjalan di atas
 // Bluetooth / BLE / WiFi Direct — TIDAK butuh internet atau server.
-//
-// Cara kerja singkat:
-// 1. Setiap device saling "advertise" dan "discover" satu sama lain
-//    lewat Bluetooth (radius biasanya puluhan meter, tergantung medan).
-// 2. Saat dua device saling terlihat, mereka otomatis connect dan
-//    bertukar identitas (nama).
-// 3. Saat user menekan SOS, payload darurat dikirim ke semua device
-//    yang sedang terhubung. Setiap device yang menerima akan
-//    meneruskan (relay) ke device lain yang terhubung dengannya,
-//    sehingga pesan bisa menjalar seperti mesh network sederhana
-//    walau di luar jangkauan langsung.
-//
-// PENTING (Android only): package nearby_connections membungkus
-// Google Nearby Connections API yang hanya tersedia di Android.
-// Untuk iOS, fitur ini akan gagal start dan sebaiknya disembunyikan
-// atau diganti alternatif (mis. MultipeerConnectivity custom plugin).
 
 import 'dart:async';
 import 'dart:convert';
@@ -44,58 +28,112 @@ class NearbyUser {
   });
 }
 
+/// DITAMBAHKAN: hasil permission dibedakan supaya UI bisa menampilkan
+/// pesan & tombol aksi yang berbeda (retry biasa vs buka Settings).
+enum PermissionResultStatus { granted, denied, permanentlyDenied, serviceDisabled }
+
 class RescueConnectivityService {
   RescueConnectivityService._internal();
   static final RescueConnectivityService instance =
       RescueConnectivityService._internal();
 
-  // Strategy P2P_CLUSTER = banyak-ke-banyak (M-to-N), paling cocok
-  // untuk kelompok pendaki yang saling mendeteksi.
   final Strategy _strategy = Strategy.P2P_CLUSTER;
   final String _serviceId = "id.capstone2.sos_rescue";
 
-  final Map<String, NearbyUser> _nearbyUsers = {}; // key: userId
-  final Map<String, String> _endpointToUserId = {}; // endpointId -> userId
-  final Set<String> _relayedMessageIds = {}; // hindari relay pesan berulang
+  final Map<String, NearbyUser> _nearbyUsers = {};
+  final Map<String, String> _endpointToUserId = {};
+  final Set<String> _relayedMessageIds = {};
 
-  /// Dipanggil setiap kali daftar pengguna sekitar berubah (dipakai utk radar UI).
+  /// DITAMBAHKAN: menyimpan endpoint yang sedang dalam proses connect,
+  /// supaya kita tidak requestConnection dua arah sekaligus (race condition).
+  final Set<String> _pendingConnections = {};
+  final Set<String> _connectedEndpoints = {};
+
   void Function(Map<String, NearbyUser> users)? onUsersChanged;
-
-  /// Dipanggil ketika ada pesan SOS masuk dari pendaki lain.
   void Function(String senderName, String message)? onEmergencyReceived;
 
-  /// Dipanggil ketika koneksi gagal / permission ditolak, dsb.
-  void Function(String error)? onError;
+  /// DIUBAH: sekarang membawa status, bukan cuma pesan string, supaya
+  /// UI tahu kapan harus menampilkan tombol "Buka Pengaturan".
+  void Function(String message, PermissionResultStatus status)? onError;
 
   String myName = "Pendaki";
   bool _running = false;
   bool get isRunning => _running;
   Map<String, NearbyUser> get nearbyUsers => Map.unmodifiable(_nearbyUsers);
 
-  Future<bool> requestPermissions() async {
-    final statuses = await [
-      Permission.bluetooth,
+  /// Cek + minta semua izin yang dibutuhkan Nearby Connections.
+  /// DIUBAH TOTAL: sekarang membedakan denied biasa vs permanently denied,
+  /// dan juga mengecek apakah Location Service (GPS toggle) aktif —
+  /// karena BLE scan akan gagal diam-diam kalau GPS mati walau izin granted.
+  Future<PermissionResultStatus> requestPermissions() async {
+    final permissions = <Permission>[
+      Permission.bluetoothScan,
       Permission.bluetoothAdvertise,
       Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.location,
+      Permission.locationWhenInUse,
       Permission.nearbyWifiDevices,
-    ].request();
+    ];
 
-    return statuses.values.every((s) => s.isGranted || s.isLimited);
+    final statuses = await permissions.request();
+
+    // DITAMBAHKAN: debug print status ASLI tiap izin satu-satu.
+    // Cek ini di terminal `flutter run` setelah tekan tombol SOS,
+    // supaya tahu persis izin mana yang bermasalah dan kenapa.
+    statuses.forEach((permission, status) {
+      // ignore: avoid_print
+      print('[SOS_PERMISSION_DEBUG] $permission => $status');
+    });
+
+    final anyPermanentlyDenied =
+        statuses.values.any((s) => s.isPermanentlyDenied);
+    final allGranted = statuses.values.every((s) => s.isGranted);
+
+    if (anyPermanentlyDenied) {
+      onError?.call(
+        "Izin Bluetooth/Lokasi ditolak permanen. Ketuk untuk membuka "
+        "Pengaturan Aplikasi dan aktifkan izin secara manual.",
+        PermissionResultStatus.permanentlyDenied,
+      );
+      return PermissionResultStatus.permanentlyDenied;
+    }
+
+    if (!allGranted) {
+      onError?.call(
+        "Izin Bluetooth/Lokasi ditolak. Fitur SOS offline tidak bisa berjalan.",
+        PermissionResultStatus.denied,
+      );
+      return PermissionResultStatus.denied;
+    }
+
+    // Izin sudah granted, tapi GPS/Location Service di HP bisa saja masih
+    // dimatikan dari Quick Settings — ini penyebab umum discovery gagal
+    // padahal semua izin sudah "granted".
+    final serviceEnabled = await Permission.location.serviceStatus.isEnabled;
+    if (!serviceEnabled) {
+      onError?.call(
+        "Aktifkan Location/GPS di pengaturan HP agar SOS offline bisa "
+        "mendeteksi pendaki lain di sekitar.",
+        PermissionResultStatus.serviceDisabled,
+      );
+      return PermissionResultStatus.serviceDisabled;
+    }
+
+    return PermissionResultStatus.granted;
   }
 
-  /// Mulai mode "selalu mendengarkan" — advertise + discover berjalan
-  /// terus di background selama user berada di halaman SOS, supaya
-  /// radar selalu menunjukkan pendaki terdekat walau SOS belum ditekan.
+  /// DITAMBAHKAN: dipanggil dari UI saat user menekan banner error
+  /// untuk kasus permanently denied.
+  Future<void> openSettings() async {
+    await openAppSettings();
+  }
+
   Future<void> start({required String userName}) async {
     if (_running) return;
     myName = userName.isEmpty ? "Pendaki" : userName;
 
-    final granted = await requestPermissions();
-    if (!granted) {
-      onError?.call(
-          "Izin Bluetooth/Lokasi ditolak. Fitur SOS offline tidak bisa berjalan.");
+    final result = await requestPermissions();
+    if (result != PermissionResultStatus.granted) {
+      // Pesan error sudah dikirim lewat onError di dalam requestPermissions().
       return;
     }
 
@@ -116,6 +154,24 @@ class RescueConnectivityService {
         _strategy,
         serviceId: _serviceId,
         onEndpointFound: (id, name, serviceId) {
+          // DIUBAH: cegah race condition P2P_CLUSTER.
+          // Kalau endpoint ini sudah connected atau sedang pending, jangan
+          // requestConnection lagi. Selain itu, untuk menghindari kedua sisi
+          // saling requestConnection bersamaan (yang bisa memicu
+          // STATUS_ALREADY_CONNECTED_TO_ENDPOINT / gagal connect), hanya
+          // device dengan id (nama+hashCode) "lebih kecil" yang menginisiasi.
+          if (_connectedEndpoints.contains(id) ||
+              _pendingConnections.contains(id)) {
+            return;
+          }
+
+          final myKey = myName.hashCode;
+          final otherKey = name.hashCode;
+          final iShouldInitiate = myKey <= otherKey;
+
+          if (!iShouldInitiate) return;
+
+          _pendingConnections.add(id);
           Nearby().requestConnection(
             myName,
             id,
@@ -126,6 +182,7 @@ class RescueConnectivityService {
         },
         onEndpointLost: (id) {
           if (id == null) return;
+          _pendingConnections.remove(id);
           final userId = _endpointToUserId[id];
           if (userId != null) {
             _nearbyUsers.remove(userId);
@@ -136,7 +193,10 @@ class RescueConnectivityService {
       );
     } catch (e) {
       _running = false;
-      onError?.call("Gagal mengaktifkan deteksi offline: $e");
+      onError?.call(
+        "Gagal mengaktifkan deteksi offline: $e",
+        PermissionResultStatus.denied,
+      );
     }
   }
 
@@ -156,9 +216,9 @@ class RescueConnectivityService {
   }
 
   void _onConnectionResult(String id, Status status) {
+    _pendingConnections.remove(id);
     if (status == Status.CONNECTED) {
-      // Begitu tersambung, langsung kirim identitas kita supaya
-      // muncul di radar lawan bicara meski belum ada SOS.
+      _connectedEndpoints.add(id);
       _sendPayload(id, {
         'msgId': _newMsgId(),
         'senderId': myName.hashCode.toString(),
@@ -170,6 +230,8 @@ class RescueConnectivityService {
   }
 
   void _onDisconnected(String id) {
+    _pendingConnections.remove(id);
+    _connectedEndpoints.remove(id);
     final userId = _endpointToUserId[id];
     if (userId != null) {
       _nearbyUsers.remove(userId);
@@ -199,9 +261,6 @@ class RescueConnectivityService {
       onEmergencyReceived?.call(senderName, message ?? 'Butuh bantuan segera!');
     }
 
-    // Relay ke device lain yang terhubung supaya sinyal SOS
-    // bisa "menjalar" walau si pengirim asli sudah di luar jangkauan
-    // penerima berikutnya (mesh sederhana), tapi cegah loop tak berujung.
     if (msgId != null && !_relayedMessageIds.contains(msgId)) {
       _relayedMessageIds.add(msgId);
       for (final otherEndpoint in _endpointToUserId.keys) {
@@ -260,6 +319,8 @@ class RescueConnectivityService {
     } catch (_) {}
     _nearbyUsers.clear();
     _endpointToUserId.clear();
+    _pendingConnections.clear();
+    _connectedEndpoints.clear();
     _running = false;
   }
 }
