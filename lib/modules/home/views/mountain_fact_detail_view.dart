@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Model fakta gunung — ditambah field [imageUrl] dan [wikiUrl] supaya
-/// halaman detail bisa menampilkan gambar & link artikel Wikipedia asli.
+/// Model fakta gunung — bertindak sebagai satu-satunya single source of truth
 class MountainFact {
   final String name;
   final String extract;
@@ -27,10 +26,7 @@ class MountainFactDetailView extends StatelessWidget {
     final uri = Uri.parse(fact.wikiUrl);
 
     try {
-      // Langsung coba launch tanpa terlalu bergantung pada canLaunchUrl(),
-      // karena di Android 11+ canLaunchUrl sering salah return false kalau
-      // <queries> di AndroidManifest.xml belum didaftarkan — meski browser
-      // sebenarnya tersedia di HP.
+      // Direct launch tanpa canLaunchUrl buat nge-bypass proteksi Android 11+
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
@@ -39,17 +35,16 @@ class MountainFactDetailView extends StatelessWidget {
       if (!launched) {
         Get.snackbar(
           "Gagal Membuka",
-          "Tidak ada aplikasi yang bisa membuka link ini.",
+          "Tidak ada aplikasi browser yang mendukung tautan ini.",
           backgroundColor: Colors.redAccent,
           colorText: Colors.white,
           snackPosition: SnackPosition.BOTTOM,
         );
       }
     } catch (e) {
-      print("Error membuka Wikipedia: $e");
       Get.snackbar(
         "Gagal Membuka",
-        "Terjadi kesalahan: $e",
+        "Terjadi kesalahan ghaib: $e",
         backgroundColor: Colors.redAccent,
         colorText: Colors.white,
         snackPosition: SnackPosition.BOTTOM,
@@ -62,6 +57,7 @@ class MountainFactDetailView extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFF0F2027),
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
             expandedHeight: fact.imageUrl != null ? 260 : 120,
@@ -100,8 +96,7 @@ class MountainFactDetailView extends StatelessWidget {
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
                             color: Colors.white10,
-                            child: const Icon(Icons.terrain,
-                                color: Colors.white24, size: 60),
+                            child: const Icon(Icons.terrain, color: Colors.white24, size: 60),
                           ),
                         ),
                         Container(
@@ -151,7 +146,7 @@ class MountainFactDetailView extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: _openWikipedia,
                       icon: const Icon(Icons.open_in_new),
-                      label: const Text("Baca Selengkapnya di Wikipedia"),
+                      label: const Text("Baca Selengkapnya di Wikipedia", style: TextStyle(fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.greenAccent,
                         foregroundColor: Colors.black,
@@ -162,7 +157,7 @@ class MountainFactDetailView extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 15),
                   const Center(
                     child: Text(
                       "Sumber: Wikipedia Bahasa Indonesia",
