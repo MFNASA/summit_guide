@@ -5,7 +5,7 @@ import '../../home/views/home_view.dart';
 import '../../profile/views/profile_view.dart';
 import '../../map/views/map_view.dart';
 import '../../scan/views/scan_view.dart';
-import '../../sos/views/sos_view.dart';
+import '../../sos/views/sos_screen.dart';
 
 // 1. IMPORT BARU (Sewa Jasa) menggantikan Rental yang udah dihapus
 import '../../sewa_jasa/views/sewa_jasa_view.dart'; 
@@ -24,7 +24,7 @@ class MainNavigationView extends StatelessWidget {
     const MapView(),
     const SewaJasaView(), // <- Panggil fitur all-in-one di sini
     const ScanView(),
-    const SosView(),
+    const SosScreen(),
     ProfileView(),
   ];
 
