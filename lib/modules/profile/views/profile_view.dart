@@ -11,7 +11,6 @@ class ProfileView extends StatelessWidget {
     final ProfileController controller = Get.put(ProfileController());
 
     return Scaffold(
-      // Background utama disesuaikan dengan warna dark teal dari gambar
       backgroundColor: const Color(0xFF1A2E31),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -28,7 +27,6 @@ class ProfileView extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            // Ikon aksen diubah menjadi hijau
             icon: const Icon(Icons.edit_note, color: Color(0xFF4CAF50), size: 30),
             onPressed: () => Get.to(() => const EditProfileView()),
           ),
@@ -38,7 +36,6 @@ class ProfileView extends StatelessWidget {
       body: Obx(() {
         if (controller.isLoading.value) {
           return const Center(
-            // Loading indicator hijau
             child: CircularProgressIndicator(color: Color(0xFF4CAF50)),
           );
         }
@@ -50,15 +47,13 @@ class ProfileView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Foto Profil — pakai avatarUrl (sudah digabung base URL di controller)
+              // Foto Profil
               Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  // Border hijau
                   border: Border.all(color: const Color(0xFF4CAF50), width: 2),
                   boxShadow: [
                     BoxShadow(
-                      // Shadow hijau transparansi
                       color: const Color(0xFF4CAF50).withOpacity(0.15),
                       blurRadius: 20,
                       spreadRadius: 2,
@@ -67,7 +62,6 @@ class ProfileView extends StatelessWidget {
                 ),
                 child: CircleAvatar(
                   radius: 60,
-                  // Background placeholder disesuaikan dengan warna card
                   backgroundColor: const Color(0xFF243B3E),
                   backgroundImage: controller.avatarUrl != null
                       ? NetworkImage(controller.avatarUrl!)
@@ -92,7 +86,6 @@ class ProfileView extends StatelessWidget {
               Text(
                 user['email'] ?? 'Belum ada email terhubung',
                 style: const TextStyle(
-                  // Warna text subtitle disesuaikan agak kebiruan
                   color: Color(0xFF98A9AC),
                   fontSize: 14,
                   letterSpacing: 1.0,
@@ -106,16 +99,13 @@ class ProfileView extends StatelessWidget {
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  // Warna container list disesuaikan dengan card di gambar
                   color: const Color(0xFF243B3E),
                   borderRadius: BorderRadius.circular(16),
-                  // Border antar container
                   border: Border.all(color: const Color(0xFF314B4F)),
                 ),
                 child: Column(
                   children: [
                     _buildListTile(Icons.phone_android, 'Nomor HP', user['phone'] ?? 'Belum diatur'),
-                    // Divider color
                     const Divider(color: Color(0xFF314B4F), height: 1),
                     _buildListTile(
                       Icons.verified_user_outlined,
@@ -125,17 +115,49 @@ class ProfileView extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // ==== SECTION: LOG AKTIVITAS ====
+              const SizedBox(height: 32),
+              _sectionLabel('AKTIVITAS TERAKHIR'),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF243B3E),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF314B4F)),
+                ),
+                child: Obx(() => ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: controller.activityLogs.length,
+                  separatorBuilder: (_, __) => const Divider(color: Color(0xFF314B4F), height: 1),
+                  itemBuilder: (context, index) {
+                    // Variabel diganti menjadi 'activity' agar tidak konflik dengan fungsi log()
+                    var activity = controller.activityLogs[index]; 
+                    return ListTile(
+                      leading: const Icon(Icons.history, color: Color(0xFF4CAF50), size: 20),
+                      title: Text(
+                        activity['title'] ?? 'Aktivitas',
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                      trailing: Text(
+                        activity['date'] ?? '',
+                        style: const TextStyle(color: Color(0xFF98A9AC), fontSize: 10),
+                      ),
+                    );
+                  },
+                )),
+              ),
               const SizedBox(height: 48),
 
+              // ==== TOMBOL LOGOUT ====
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFB71C1C), // Tetap merah untuk tombol logout
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
+                    backgroundColor: const Color(0xFFB71C1C),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 5,
                   ),
                   onPressed: () => controller.logout(),
@@ -157,18 +179,15 @@ class ProfileView extends StatelessWidget {
     );
   }
 
+  // --- Helper Widgets ---
+
   String _statusLabel(dynamic status) {
     switch (status) {
-      case 'active':
-        return 'Aktif';
-      case 'pending':
-        return 'Menunggu Verifikasi';
-      case 'unverified':
-        return 'Belum Verifikasi Email';
-      case 'suspended':
-        return 'Diblokir';
-      default:
-        return 'Tidak diketahui';
+      case 'active': return 'Aktif';
+      case 'pending': return 'Menunggu Verifikasi';
+      case 'unverified': return 'Belum Verifikasi Email';
+      case 'suspended': return 'Diblokir';
+      default: return 'Tidak diketahui';
     }
   }
 
@@ -178,7 +197,6 @@ class ProfileView extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          // Warna teks label
           color: Color(0xFF98A9AC),
           fontSize: 12,
           fontWeight: FontWeight.bold,
@@ -189,38 +207,22 @@ class ProfileView extends StatelessWidget {
   }
 
   Widget _buildListTile(IconData icon, String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            // Background icon menggunakan warna background utama agar terlihat "masuk"
-            color: const Color(0xFF1A2E31),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          // Warna ikon diubah ke hijau
-          child: Icon(icon, color: const Color(0xFF4CAF50), size: 24),
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A2E31),
+          borderRadius: BorderRadius.circular(10),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: Color(0xFF98A9AC),
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4.0),
-          child: Text(
-            subtitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
+        child: Icon(icon, color: const Color(0xFF4CAF50), size: 24),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(color: Color(0xFF98A9AC), fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
       ),
     );
   }

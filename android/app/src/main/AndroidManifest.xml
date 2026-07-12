@@ -19,9 +19,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- DITAMBAHKAN: fitur BLE wajib dideklarasikan agar Play Store/sistem tahu
-         app ini butuh Bluetooth Low Energy. required=false supaya app tetap
-         bisa diinstall di device tanpa BLE (fitur SOS offline saja yang nonaktif). -->
+    <!-- DITAMBAHKAN: fitur BLE wajib dideklarasikan agar Play Store/sistem tahu app ini butuh Bluetooth Low Energy. required=false supaya app tetap bisa diinstall di device tanpa BLE (fitur SOS offline saja yang nonaktif). -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <!-- WiFi Direct (dipakai Nearby Connections sebagai fallback) -->
@@ -29,15 +27,12 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" tools:targetApi="33" />
 
-    <!-- DITAMBAHKAN: hanya perlu jika kamu ingin scanning/advertising tetap
-         jalan saat app diminimize/background. Kalau discovery hanya perlu
-         aktif selagi halaman SOS terbuka di foreground, dua baris ini boleh
-         dihapus. -->
+    <!-- DITAMBAHKAN: hanya perlu jika kamu ingin scanning/advertising tetap jalan saat app diminimize/background. Kalau discovery hanya perlu aktif selagi halaman SOS terbuka di foreground, dua baris ini boleh dihapus. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
     <application
-        android:label="capstone2"
+        android:label="summit guide"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

@@ -11,10 +11,12 @@ class ProfileController extends GetxController {
   var isUpdating = false.obs;
   var userData = {}.obs;
 
+  // Variabel untuk log aktivitas
+  var activityLogs = <Map<String, dynamic>>[].obs;
+
   final GetStorage _box = GetStorage();
   final ImagePicker _picker = ImagePicker();
 
-  // Controller untuk form edit
   final nameCtrl = TextEditingController();
   final phoneCtrl = TextEditingController();
   final oldPassCtrl = TextEditingController();
@@ -25,15 +27,23 @@ class ProfileController extends GetxController {
   void onInit() {
     super.onInit();
     fetchProfile();
+    fetchActivityLogs(); // Panggil fungsi log saat inisialisasi
   }
 
   String? _getToken() {
     return _box.read('token');
   }
 
-  // Parse cache dengan aman — bisa berupa String JSON (kalau AuthController
-  // menyimpan pakai jsonEncode) ATAU Map langsung. Ini mencegah error
-  // "_TypeError: type 'String' is not a subtype of type 'Map<...>'"
+  // Fungsi untuk mengambil log aktivitas
+  Future<void> fetchActivityLogs() async {
+    // Tambahkan logika pemanggilan API log Anda di sini jika ada
+    // Sementara menggunakan data dummy
+    activityLogs.value = [
+      {'title': 'Login Berhasil', 'date': '12 Jul 2026, 09:00'},
+      {'title': 'Update Profil', 'date': '10 Jul 2026, 14:30'},
+    ];
+  }
+
   Map<String, dynamic> _parseUserCache(dynamic raw) {
     if (raw == null) return {};
     if (raw is String) {
@@ -48,19 +58,12 @@ class ProfileController extends GetxController {
     return {};
   }
 
-  // ==========================================================
-  // AMBIL DATA PROFIL
-  // ==========================================================
-  // Sekarang backend sudah punya GET /api/user/profile, jadi data
-  // profil (termasuk phone & profile_photo) selalu ditarik langsung
-  // dari database, bukan cuma dari cache login yang datanya minim.
   Future<void> fetchProfile() async {
     final token = _getToken();
     if (token == null || token.isEmpty) return;
 
     try {
       isLoading.value = true;
-
       final response = await GetConnect().get(
         "${ApiConfig.baseUrl}/api/user/profile",
         headers: {
@@ -73,7 +76,7 @@ class ProfileController extends GetxController {
       if (response.statusCode == 200) {
         final fresh = response.body['user'] ?? response.body;
         userData.value = _parseUserCache(fresh);
-        _box.write('user', userData); // update cache biar sinkron
+        _box.write('user', userData);
       } else {
         userData.value = _parseUserCache(_box.read('user'));
       }
@@ -81,16 +84,12 @@ class ProfileController extends GetxController {
       nameCtrl.text = userData['name'] ?? '';
       phoneCtrl.text = userData['phone'] ?? '';
     } catch (e) {
-      print("Error fetch profile: $e");
       userData.value = _parseUserCache(_box.read('user'));
-      nameCtrl.text = userData['name'] ?? '';
-      phoneCtrl.text = userData['phone'] ?? '';
     } finally {
       isLoading.value = false;
     }
   }
 
-  // Bikin URL foto profil jadi URL lengkap (backend cuma kirim path relatif)
   String? get avatarUrl {
     final photo = userData['profile_photo'];
     if (photo == null || photo.toString().isEmpty) return null;
@@ -98,7 +97,6 @@ class ProfileController extends GetxController {
     return "${ApiConfig.baseUrl}$photo";
   }
 
-  // Pilih Foto dari Galeri
   Future<void> pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
@@ -106,27 +104,17 @@ class ProfileController extends GetxController {
     }
   }
 
-  // ==========================================================
-  // UPDATE PROFIL (sesuai endpoint PUT /api/user/profile di backend)
-  // ==========================================================
   Future<void> updateProfile() async {
     final token = _getToken();
     if (token == null) return;
 
-    // Validasi ringan di sisi klien sebelum kirim ke server
     if (newPassCtrl.text.isNotEmpty && oldPassCtrl.text.isEmpty) {
-      Get.snackbar(
-        "Gagal",
-        "Password lama wajib diisi untuk mengganti password.",
-        backgroundColor: const Color(0xFFD32F2F),
-        colorText: Colors.white,
-      );
+      Get.snackbar("Gagal", "Password lama wajib diisi.", backgroundColor: Colors.red, colorText: Colors.white);
       return;
     }
 
     try {
       isUpdating.value = true;
-
       final form = FormData({
         if (nameCtrl.text.isNotEmpty) 'name': nameCtrl.text,
         if (phoneCtrl.text.isNotEmpty) 'phone': phoneCtrl.text,
@@ -145,45 +133,20 @@ class ProfileController extends GetxController {
       final response = await GetConnect().put(
         "${ApiConfig.baseUrl}/api/user/profile",
         form,
-        headers: {
-          "Authorization": "Bearer $token",
-          "ngrok-skip-browser-warning": "true",
-        },
+        headers: {"Authorization": "Bearer $token", "ngrok-skip-browser-warning": "true"},
       );
 
       if (response.statusCode == 200) {
-        // Backend hanya mengembalikan {id, name, phone, profile_photo}
-        // (tidak termasuk email/role), jadi kita GABUNG dengan data lama
-        // supaya email & role tidak hilang dari cache.
         final updatedUser = _parseUserCache(response.body['user']);
         final merged = <String, dynamic>{...userData, ...updatedUser};
-
         userData.value = merged;
-        _box.write('user', merged); // simpan lagi ke cache biar konsisten
+        _box.write('user', merged);
 
         Get.back();
-        Get.snackbar(
-          "Sukses",
-          "Data berhasil diperbarui.",
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-
-        oldPassCtrl.clear();
-        newPassCtrl.clear();
-        selectedImagePath.value = '';
+        Get.snackbar("Sukses", "Data berhasil diperbarui.", backgroundColor: Colors.green, colorText: Colors.white);
       } else {
-        Get.snackbar(
-          "Gagal Update",
-          response.body?['message'] ?? 'Terjadi kesalahan.',
-          backgroundColor: const Color(0xFFD32F2F),
-          colorText: Colors.white,
-        );
+        Get.snackbar("Gagal", response.body?['message'] ?? 'Error.', backgroundColor: Colors.red, colorText: Colors.white);
       }
-    } catch (e) {
-      print("Error update profile: $e");
-      Get.snackbar("Error", "Server tidak merespon.",
-          backgroundColor: Colors.red, colorText: Colors.white);
     } finally {
       isUpdating.value = false;
     }

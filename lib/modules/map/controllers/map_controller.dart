@@ -204,33 +204,38 @@ class AppMapController extends GetxController {
   /// [mountainId] opsional, tapi WAJIB diisi kalau gunung ini sudah/akan
   /// didownload, supaya GPX-nya bisa di-cache dan dipakai offline nanti.
   Future<void> loadGpxRoute(String gpxUrlPath, {String? mountainId}) async {
-    isLoading.value = true;
-    isRouteFromCache.value = false;
-    routePoints.clear();
+  isLoading.value = true;
+  isRouteFromCache.value = false;
+  routePoints.clear();
 
-    final String fullUrl = '${ApiConfig.baseUrl}$gpxUrlPath';
-    String? gpxString;
+  // Kalau gpxUrlPath sudah URL lengkap (misal dari Supabase Storage),
+  // pakai langsung. Kalau path relatif, baru digabung dengan baseUrl.
+  final String fullUrl = gpxUrlPath.startsWith('http://') ||
+          gpxUrlPath.startsWith('https://')
+      ? gpxUrlPath
+      : '${ApiConfig.baseUrl}$gpxUrlPath';
 
-    try {
-      final response = await http
-          .get(
-            Uri.parse(fullUrl),
-            headers: {'ngrok-skip-browser-warning': 'true'},
-          )
-          .timeout(const Duration(seconds: 12));
+  String? gpxString;
 
-      if (response.statusCode == 200) {
-        gpxString = response.body;
-        // Simpan ke cache supaya bisa dipakai offline nanti
-        if (mountainId != null) {
-          await _box.write(_cachedGpxPrefix + mountainId, gpxString);
-        }
-      } else {
-        print("Gagal memuat GPX: status code ${response.statusCode}");
+  try {
+    final response = await http
+        .get(
+          Uri.parse(fullUrl),
+          headers: {'ngrok-skip-browser-warning': 'true'},
+        )
+        .timeout(const Duration(seconds: 12));
+
+    if (response.statusCode == 200) {
+      gpxString = response.body;
+      if (mountainId != null) {
+        await _box.write(_cachedGpxPrefix + mountainId, gpxString);
       }
-    } catch (e) {
-      print("Gagal memuat GPX online: $e");
+    } else {
+      print("Gagal memuat GPX: status code ${response.statusCode}, url: $fullUrl");
     }
+  } catch (e) {
+    print("Gagal memuat GPX online: $e, url: $fullUrl");
+  }
 
     // Kalau gagal dari internet (offline / error), coba pakai cache lokal
     if (gpxString == null && mountainId != null) {

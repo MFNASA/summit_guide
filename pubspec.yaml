@@ -38,6 +38,7 @@ dependencies:
   permission_handler: ^11.3.1  
 
   geocoding: ^5.0.0
+  location: ^6.0.2
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +51,7 @@ flutter:
   uses-material-design: true
 
   assets:
+
     - assets/images/
     - assets/models/best.tflite
     - assets/sounds/sos_alarm.mp3
@@ -61,3 +63,5 @@ flutter_launcher_icons:
   image_path: "assets/images/logo.png" # <-- Pastikan file logo lo di folder assets/images namanya logo.png
   adaptive_icon_background: "#121212"  # Background gelap premium biar matching sama tema modern-dark
   adaptive_icon_foreground: "assets/images/logo.png"
+
+
