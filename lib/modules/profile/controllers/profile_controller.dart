@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'package:capstone2/core/utils/api_config.dart';
+import 'package:capstone2/core/utils/local_activity_logger.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ProfileController extends GetxController {
@@ -11,8 +12,9 @@ class ProfileController extends GetxController {
   var isUpdating = false.obs;
   var userData = {}.obs;
 
-  // Variabel untuk log aktivitas
+  // Log aktivitas gabungan (lokal + server)
   var activityLogs = <Map<String, dynamic>>[].obs;
+  var isLoadingActivity = false.obs;
 
   final GetStorage _box = GetStorage();
   final ImagePicker _picker = ImagePicker();
@@ -27,21 +29,86 @@ class ProfileController extends GetxController {
   void onInit() {
     super.onInit();
     fetchProfile();
-    fetchActivityLogs(); // Panggil fungsi log saat inisialisasi
+    fetchActivityLogs();
   }
 
   String? _getToken() {
     return _box.read('token');
   }
 
-  // Fungsi untuk mengambil log aktivitas
+  // ==========================================================
+  // LOG AKTIVITAS: gabungan log lokal (login, update profil)
+  // + data dari API yang SUDAH ADA di backend (tiket & sewa),
+  // TANPA perlu endpoint atau tabel baru sama sekali.
+  // ==========================================================
   Future<void> fetchActivityLogs() async {
-    // Tambahkan logika pemanggilan API log Anda di sini jika ada
-    // Sementara menggunakan data dummy
-    activityLogs.value = [
-      {'title': 'Login Berhasil', 'date': '12 Jul 2026, 09:00'},
-      {'title': 'Update Profil', 'date': '10 Jul 2026, 14:30'},
-    ];
+    isLoadingActivity.value = true;
+    final List<Map<String, dynamic>> combined = [];
+
+    // --- 1. Log lokal (login, update profil) ---
+    for (final log in LocalActivityLogger.getAll()) {
+      combined.add({
+        'title': log['title'],
+        'subtitle': null,
+        'timestamp': log['timestamp'],
+      });
+    }
+
+    final token = _getToken();
+    if (token != null && token.isNotEmpty) {
+      final headers = {
+        "Authorization": "Bearer $token",
+        "Accept": "application/json",
+        "ngrok-skip-browser-warning": "true",
+      };
+
+      try {
+        // --- 2. Riwayat tiket (endpoint sudah ada: /api/user/history) ---
+        final ticketRes = await GetConnect().get(
+          "${ApiConfig.baseUrl}/api/user/history",
+          headers: headers,
+        );
+        if (ticketRes.statusCode == 200) {
+          final List<dynamic> tickets = ticketRes.body['history'] ?? [];
+          for (final t in tickets) {
+            combined.add({
+              'title': 'Pemesanan Tiket ${t['basecamp_name'] ?? '-'}',
+              'subtitle': 'Tanggal: ${t['date'] ?? '-'} • ${t['payment_status'] ?? '-'}',
+              'timestamp': t['date'], // tanggal booking sebagai acuan urutan
+            });
+          }
+        }
+
+        // --- 3. Riwayat sewa alat (endpoint sudah ada: /api/rental/my) ---
+        final rentalRes = await GetConnect().get(
+          "${ApiConfig.baseUrl}/api/rental/my",
+          headers: headers,
+        );
+        if (rentalRes.statusCode == 200) {
+          final List<dynamic> rentals = rentalRes.body['rentals'] ?? [];
+          for (final r in rentals) {
+            combined.add({
+              'title': 'Sewa ${r['item_name'] ?? '-'} (${r['qty']}x)',
+              'subtitle': '${r['start_date'] ?? '-'} s/d ${r['end_date'] ?? '-'} • ${r['payment_status'] ?? '-'}',
+              'timestamp': r['start_date'],
+            });
+          }
+        }
+      } catch (e) {
+        print('Gagal ambil sebagian log aktivitas dari server: $e');
+        // Tidak apa-apa kalau gagal, log lokal tetap tampil
+      }
+    }
+
+    // Urutkan dari yang paling baru
+    combined.sort((a, b) {
+      final dateA = DateTime.tryParse(a['timestamp']?.toString() ?? '') ?? DateTime(2000);
+      final dateB = DateTime.tryParse(b['timestamp']?.toString() ?? '') ?? DateTime(2000);
+      return dateB.compareTo(dateA);
+    });
+
+    activityLogs.value = combined;
+    isLoadingActivity.value = false;
   }
 
   Map<String, dynamic> _parseUserCache(dynamic raw) {
@@ -141,6 +208,9 @@ class ProfileController extends GetxController {
         final merged = <String, dynamic>{...userData, ...updatedUser};
         userData.value = merged;
         _box.write('user', merged);
+
+        await LocalActivityLogger.log('Profil diperbarui'); // <-- catat lokal
+        await fetchActivityLogs(); // refresh timeline biar langsung update
 
         Get.back();
         Get.snackbar("Sukses", "Data berhasil diperbarui.", backgroundColor: Colors.green, colorText: Colors.white);

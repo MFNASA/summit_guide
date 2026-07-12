@@ -6,7 +6,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 // IMPORT FILE CONFIG PUSAT
-import '../../../core/utils/api_config.dart'; // Sesuaikan letak folder api_config.dart kamu
+import '../../../core/utils/api_config.dart';
+import '../../../core/utils/local_activity_logger.dart'; // Sesuaikan letak folder api_config.dart kamu
 
 class AuthController extends GetxController {
   // Controller untuk menangkap input dari textfield
@@ -40,6 +41,7 @@ class AuthController extends GetxController {
     if (data['user'] != null) {
       await _box.write('user', jsonEncode(data['user']));
     }
+    await LocalActivityLogger.log('Login berhasil');
   }
 
   /// ==========================================

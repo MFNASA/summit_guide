@@ -5,7 +5,7 @@
 // Ganti package di baris `package ...` sesuai package project kamu
 // (lihat applicationId di build.gradle.kts: com.example.capstone2).
 
-package com.example.capstone2
+package com.hn.summitguide
 
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
